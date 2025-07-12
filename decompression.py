@@ -94,7 +94,9 @@ if (__name__=="__main__"):
 
         for f in filenames:
             print(f"decompressing test: {f}")
-            decompress_to_temp(os.path.join(dirname, f))
+            fname = decompress_to_temp(os.path.join(dirname, f))
+            print(fname)
+
 
     
 

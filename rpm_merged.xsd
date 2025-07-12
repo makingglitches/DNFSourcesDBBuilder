@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://linux.duke.edu/metadata/common"
+           xmlns:common="http://linux.duke.edu/metadata/common"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <!-- Define common dependency entry type -->
+  <xs:complexType name="dependencyEntryType">
+    <xs:attribute name="name" type="xs:string" />
+    <xs:attribute name="flags" type="xs:string" />
+    <xs:attribute name="epoch" type="xs:string" />
+    <xs:attribute name="ver" type="xs:string" />
+    <xs:attribute name="rel" type="xs:string" />
+    <xs:attribute name="pre" type="xs:string" />
+  </xs:complexType>
+
+  <!-- Define common dependency container type -->
+  <xs:complexType name="dependencyType">
+    <xs:sequence>
+      <xs:element name="entry" type="common:dependencyEntryType" minOccurs="0" maxOccurs="unbounded" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Common namespace elements -->
+  <xs:element name="license" type="xs:string" />
+  <xs:element name="vendor" type="xs:string" />
+  <xs:element name="group" type="xs:string" />
+  <xs:element name="buildhost" type="xs:string" />
+  <xs:element name="sourcerpm" type="xs:string" />
+  
+  <xs:element name="header-range">
+    <xs:complexType>
+      <xs:attribute name="start" type="xs:string" />
+      <xs:attribute name="end" type="xs:string" />
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="provides" type="common:dependencyType" />
+  <xs:element name="requires" type="common:dependencyType" />
+  <xs:element name="recommends" type="common:dependencyType" />
+  <xs:element name="conflicts" type="common:dependencyType" />
+  <xs:element name="obsoletes" type="common:dependencyType" />
+  <xs:element name="suggests" type="common:dependencyType" />
+
+  <!-- Main metadata structure -->
+  <xs:element name="metadata">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="package" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:all>
+              <xs:element name="name" type="xs:string" minOccurs="0" />
+              <xs:element name="arch" type="xs:string" minOccurs="0" />
+              <xs:element name="version" minOccurs="0">
+                <xs:complexType>
+                  <xs:attribute name="epoch" type="xs:string" />
+                  <xs:attribute name="ver" type="xs:string" />
+                  <xs:attribute name="rel" type="xs:string" />
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="checksum" minOccurs="0">
+                <xs:complexType>
+                  <xs:simpleContent>
+                    <xs:extension base="xs:string">
+                      <xs:attribute name="type" type="xs:string" />
+                      <xs:attribute name="pkgid" type="xs:string" />
+                    </xs:extension>
+                  </xs:simpleContent>
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="time" minOccurs="0">
+                <xs:complexType>
+                  <xs:attribute name="file" type="xs:string" />
+                  <xs:attribute name="build" type="xs:string" />
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="size" minOccurs="0">
+                <xs:complexType>
+                  <xs:attribute name="package" type="xs:string" />
+                  <xs:attribute name="installed" type="xs:string" />
+                  <xs:attribute name="archive" type="xs:string" />
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="location" minOccurs="0">
+                <xs:complexType>
+                  <xs:attribute name="href" type="xs:string" />
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="format" minOccurs="0">
+                <xs:complexType>
+                  <xs:choice minOccurs="0" maxOccurs="unbounded">
+                    <!-- Allow any elements from rpm namespace or common namespace -->
+                    <xs:any namespace="http://linux.duke.edu/metadata/rpm http://linux.duke.edu/metadata/common ##local" processContents="lax" />
+                  </xs:choice>
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="summary" type="xs:string" minOccurs="0" />
+              <xs:element name="description" type="xs:string" minOccurs="0" />
+              <xs:element name="packager" type="xs:string" minOccurs="0" />
+              <xs:element name="url" type="xs:string" minOccurs="0" />
+            </xs:all>
+            <xs:attribute name="type" type="xs:string" />
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="packages" type="xs:string" />
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>

@@ -197,7 +197,6 @@ def extract_rpm_keywords_and_offset(rpm_path):
                 payloadcomptype = comptype
                 break
               
-
     return {"signature": signature_values, "main": main_values,'payload_offset': payload_offset, 'payload_compression_type': payloadcomptype}
 
 if __name__ == "__main__":

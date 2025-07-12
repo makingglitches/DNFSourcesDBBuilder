@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
+
 import sqlite3
 import xml.etree.ElementTree as ET
-import gzip
-import subprocess
-import tempfile
+
+
 import os
 import sys
-import shutil
-import fnmatch
 
-# Compression utilities
-ZCK_CMD = "unzck"
-ZST_CMD = "unzstd"
-GZ_CMD = "gzip"  # handled by Python gzip module
+import fnmatch
+import decompression as decomp
+
+
+
 
 NS = {
     'common': 'http://linux.duke.edu/metadata/common',
@@ -23,34 +22,6 @@ RELATION_TAGS = [
     'requires', 'provides', 'conflicts', 'obsoletes',
     'recommends', 'suggests', 'supplements', 'enhances'
 ]
-
-def decompress_to_temp(file_path):
-    """Decompress file to a temporary file and return the temp filename."""
-    if file_path.endswith(".gz"):
-        temp = tempfile.NamedTemporaryFile(delete=False)
-        with gzip.open(file_path, 'rb') as f_in, open(temp.name, 'wb') as f_out:
-            f_out.write(f_in.read())
-        return temp.name
-
-    elif file_path.endswith(".zck"):
-        if not shutil.which(ZCK_CMD):
-            raise RuntimeError(f"{ZCK_CMD} not found; install zchunk package")
-        # unzck returns decompressed filename
-        result = subprocess.run([ZCK_CMD, file_path], capture_output=True, text=True, check=True)
-        decompressed_file = result.stdout.strip()
-        if not os.path.isfile(decompressed_file):
-            raise RuntimeError(f"Decompressed file {decompressed_file} not found after unzck")
-        return decompressed_file
-
-    elif file_path.endswith(".zst"):
-        if not shutil.which(ZST_CMD):
-            raise RuntimeError(f"{ZST_CMD} not found; install zstd package")
-        temp = tempfile.NamedTemporaryFile(delete=False)
-        subprocess.run([ZST_CMD, '-d', '--stdout', file_path], stdout=open(temp.name, 'wb'), check=True)
-        return temp.name
-
-    else:
-        return file_path
 
 def open_xml(file_path):
     """Decompress and parse XML, returning the ElementTree."""
@@ -81,7 +52,7 @@ def create_schema(cursor):
     ''')
     for tag in RELATION_TAGS:
         cursor.execute(f'''
-            CREATE TABLE IF NOT EXISTS {tag} (
+            CREATE TABLE IF NOT EXISTS :tag (
                 pkgid TEXT,
                 name TEXT,
                 pre BOOLEAN,
@@ -100,6 +71,8 @@ def insert_relation(cursor, pkgid, tag, entry):
     ''', (pkgid, name, pre, flags))
 
 def insert_package(cursor, pkg_elem):
+    #TODO: MANUALLY INSPECT THE NAMESPACE, XMLTREE EXPANDS TO 
+    #'{http://linux.duke.edu/metadata/common}name'  LIKE A DUMBASS.
     pkgid = pkg_elem.findtext('checksum')
     name = pkg_elem.findtext('name')
     arch = pkg_elem.findtext('arch')
@@ -132,9 +105,14 @@ def process_file(db_cursor, file_path):
     except Exception as e:
         print(f"Error parsing {file_path}: {e}")
         return 0
+
+        
     root = tree.getroot()
     count = 0
-    for pkg in root.findall(f'{{{NS["common"]}}}package'):
+
+    total = root.attrib['packages']
+
+    for pkg in root.findall('{http://linux.duke.edu/metadata/common}package'):
         insert_package(db_cursor, pkg)
         count += 1
     return count

@@ -3,7 +3,7 @@ INSERT INTO {generic} (
                           pkgid,
                           name,
                           version,
-                          [release],
+                          release_ver,
                           epoch,
                           flags
                       )
@@ -12,7 +12,7 @@ INSERT INTO {generic} (
                           :pkgid,
                           :name,
                           :version,
-                          :release,
+                          :release_ver,
                           :epoch,
                           :flags
                       );

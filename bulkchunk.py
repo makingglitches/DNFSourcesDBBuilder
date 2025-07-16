@@ -2,6 +2,11 @@ import sqlite3
 import re
 import math
 
+
+# good for the specific usecase
+# further refinement is in a heavily modified script sqlcolmap in the gis notes application
+
+
 # sql internal limit
 maxparamlim = 999
 
@@ -20,7 +25,7 @@ def getColumnList(sql:str)->list[str] | None:
 
 
 
-def genstatement(sql:str, parameters:list[dict], tupleLimit=200)->list[str]:
+def genstatement(sql:str, tupleLimit=200)->list[str]:
 
     # its going to be expected that the parameters dictionary
     # contains keys that match the column list of the sql
@@ -29,24 +34,100 @@ def genstatement(sql:str, parameters:list[dict], tupleLimit=200)->list[str]:
     # single instance of unnamed parameters (?,..,?)
     valpiece = "("+ ','.join( ['?' for i in range(0,len(collist))]) +')'
 
-    maxpieces = math.trunc( maxparamlim / len(collist)) 
+    maxpieces = maxitemsforstmt(collist) 
 
     # will error if there is none
     table =  sql[0: sql.index('(')-1].strip().split(' ')[-1]
         
     if maxpieces > tupleLimit:
         maxpieces = tupleLimit
-
-    if len(parameters) > maxpieces:
-        raise ValueError("Adjust your logic, for the query provided maximum parameters is exceeded by the list of values supplied")
-    elif len(parameters) < maxpieces:
-        maxpieces = len(parameters)    
-    
+    elif maxpieces  < tupleLimit:
+        raise "your batch size is too large."
+  
     basesql = f"INSERT INTO {table}( {','.join(collist)}) VALUES (\n" 
     basesql = basesql +  ',\t\n'.join( [ valpiece for i in range(0,maxpieces) ]) + "\n);"
 
     return basesql
-                        
+
+
+
+def flattenbatch(collist:list[str], batch:list[dict])->list[dict]:
+
+    resbatch = []
+
+    for i in batch:
+        item = []
+
+        for c in collist:    
+            item.append(i[c])
+
+        resbatch.extend(item)
+
+    return resbatch
+
+def maxitemsforstmt(collist:list[str])->int:
+    return math.trunc(maxparamlim / len(collist))
+
+# keep this as is for mysql
+def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict]):
+
+    if conn.in_transaction:
+        conn.commit()
+
+    conn.execute("PRAGMA synchronous = OFF")
+    conn.execute("PRAGMA journal_mode = MEMORY")
+    conn.execute("PRAGMA temp_store = MEMORY")
+
+    conn.execute('BEGIN')
+
+    count = 0
+    total = len(parameters)
+    
+    collist = getColumnList(sql)
+
+    # absolute maximum number of records to process in one batch
+    maxlimit = maxitemsforstmt(collist)
+    
+    # # adjust to make sure of no failure.
+    # maxlimit = maxlimit if absmax > maxlimit else absmax
+    
+    while len(parameters) > maxlimit:
+
+        # pull out expected bathsize
+        batch,parameters = (parameters[0:maxlimit], parameters[maxlimit:])
+
+        count  = count + len(batch)
+
+        # if verbose:
+        #     print(f"Processing {count} of {total} ", end="\r")
+        
+        #stmt = genstatement(sql,maxlimit)
+
+        #batch = flattenbatch(collist, batch)
+        
+        conn.executemany(sql,batch) #stmt, batch
+
+    conn.commit()
+    
+    if len(parameters) > 0:
+
+        #stmt = genstatement(sql, maxlimit)
+
+        count = count + len(parameters)
+
+        # for other sql instances this would work.
+        #batch = flattenbatch(collist, parameters)
+
+        # if verbose:
+        #     print(f"Processing {count} of {total} ", end="\r")
+        
+        conn.executemany(sql,parameters) #stmt,batch)
+
+    conn.commit()
+
+    return total
+
+    #print()
 
 if __name__=="__main__":
 
@@ -65,12 +146,12 @@ if __name__=="__main__":
 
     # fails
     try:
-        insql = genstatement(sql,params,tupleLimit=2)
+        insql = genstatement(sql,tupleLimit=2)
     except ValueError:
         insql = ""
 
     # succeeds
-    insql = genstatement(sql,params)
+    insql = genstatement(sql,len(params))
 
     print(insql)
 

@@ -22,7 +22,7 @@ CREATE TABLE packages (
     name           TEXT,
     arch           TEXT,
     version        TEXT,
-    [release]      TEXT,
+    release_ver      TEXT,
     epoch          TEXT,
     summary        TEXT,
     description    TEXT,
@@ -36,7 +36,7 @@ CREATE TABLE packages (
     location       TEXT,
     license        TEXT,
     vendor         TEXT,
-    [group]        TEXT,
+    app_group        TEXT,
     buildhost      TEXT,
     header_start   INTEGER,
     header_end     INTEGER,
@@ -55,7 +55,7 @@ CREATE TABLE provides (
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -73,7 +73,7 @@ CREATE TABLE recommends (
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -91,7 +91,7 @@ CREATE TABLE requires(
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -109,7 +109,7 @@ CREATE TABLE suggests (
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -128,7 +128,7 @@ CREATE TABLE conflicts (
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -147,7 +147,7 @@ CREATE TABLE obsoletes (
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -165,7 +165,7 @@ CREATE TABLE supplements (
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -183,7 +183,7 @@ CREATE TABLE enhances (
     repo_uuid TEXT,
     name      TEXT,
     version   TEXT,
-    [release] TEXT,
+    release_ver TEXT,
     epoch     INTEGER,
     flags     TEXT,
     FOREIGN KEY (
@@ -200,8 +200,8 @@ create table installed(
     epoch text,
     name text,
     version text, 
-    release text,
+    release_ver text,
     arch text,
     repo text,
-    primary KEY(name,version,release,arch)
+    primary KEY(name,version,release_ver,arch)
 );

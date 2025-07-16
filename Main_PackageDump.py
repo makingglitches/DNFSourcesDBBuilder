@@ -115,6 +115,8 @@ def main():
         #all_packages = []
 
         repouuid = r['repo_uuid']
+
+        pkgbatch = []
         
         for p in packages:
 
@@ -163,7 +165,7 @@ def main():
                 'arch': arch,
                 'version': ver_ver,
                 'epoch': ver_epoch,
-                'release': ver_rel,                                
+                'release_ver': ver_rel,                                
                 'summary': summary,
                 'description': description,
                 'packager': packager,
@@ -179,7 +181,7 @@ def main():
                 'checksum':checksum,
                 'license': None,
                 'vendor': None,
-                'group': None,
+                'app_group': None,
                 'buildhost': None,
                 'sourcerpm': None,
                 'header_start': None,
@@ -199,7 +201,7 @@ def main():
 
             if format_tag is not None:
 
-                def extract_entries(tag_name):
+                def extract_entries(tag_name:str, pkgid:str, repo_uuid:str):
                     entries = []
                     tag = format_tag.find(f'rpm:{tag_name}', NS)
                     if tag is not None:
@@ -207,6 +209,7 @@ def main():
                             
                             item = dict(entry.attrib)
                             
+                            # translate names from xml to table fields
                             for oldname in package_sql.ENTRY_FIELDS:
                                 newname = package_sql.ENTRY_FIELDS[oldname]
 
@@ -215,7 +218,11 @@ def main():
                                         item[oldname] = None
                                 else:
                                     item[newname] = None if not oldname in item else item.pop(oldname)
-                            
+
+                            # add primary key reference
+                            item['pkgid'] = pkgid
+                            item['repo_uuid'] = repo_uuid 
+
                             entries.append(item)
 
                     return entries
@@ -223,19 +230,19 @@ def main():
                 package_data.update({
                     'license': format_tag.findtext('rpm:license', namespaces=NS),
                     'vendor': format_tag.findtext('rpm:vendor', namespaces=NS),
-                    'group': format_tag.findtext('rpm:group', namespaces=NS),
+                    'app_group': format_tag.findtext('rpm:group', namespaces=NS),
                     'buildhost': format_tag.findtext('rpm:buildhost', namespaces=NS),
                     'sourcerpm': format_tag.findtext('rpm:sourcerpm', namespaces=NS),
                     'header_start': None,
                     'header_end':None,
-                    'requires': extract_entries('requires'),
-                    'provides': extract_entries('provides'),
-                    'conflicts': extract_entries('conflicts'),
-                    'obsoletes': extract_entries('obsoletes'),
-                    'recommends': extract_entries('recommends'),
-                    'suggests': extract_entries('suggests'),
-                    'supplements': extract_entries('supplements'),
-                    'enhances': extract_entries('enhances'),
+                    'requires': extract_entries('requires',checksum,repouuid),
+                    'provides': extract_entries('provides', checksum, repouuid),
+                    'conflicts': extract_entries('conflicts', checksum, repouuid),
+                    'obsoletes': extract_entries('obsoletes', checksum, repouuid),
+                    'recommends': extract_entries('recommends', checksum, repouuid),
+                    'suggests': extract_entries('suggests', checksum, repouuid),
+                    'supplements': extract_entries('supplements', checksum, repouuid),
+                    'enhances': extract_entries('enhances', checksum, repouuid),
                     'files': [
                         {
                             'name': f.text,
@@ -253,11 +260,25 @@ def main():
             # this doesn't make sense.
             #all_packages.append(package_data)
 
-            package_sql.InsertPackage(conn,package_data)
+            pkgbatch.append(package_data)
 
-            for tag in package_sql.RELATION_TAGS:
-                for item in package_data[tag]:
-                    package_sql.InsertGeneric(conn, tag, repouuid, checksum, item)
+            if len (pkgbatch) == package_sql.CURRENT_BATCH_MAX:
+                package_sql.InsertPackage(conn,pkgbatch)
+
+                for pkg in pkgbatch:
+                    for tag in package_sql.RELATION_TAGS:
+                        #print(f"Processing tag: {tag}")
+                        package_sql.InsertGeneric(conn,tag,pkg[tag])
+
+                pkgbatch = []
+
+        if len(pkgbatch) > 0:
+            package_sql.InsertPackage(conn,pkgbatch)
+
+            for pkg in pkgbatch:
+                for tag in package_sql.RELATION_TAGS:
+                    #print(f"Processing tag: {tag}")
+                    package_sql.InsertGeneric(conn,tag,pkg[tag])
 
         os.remove(decomtemp)
         print()
@@ -267,10 +288,8 @@ def main():
 
     count = 0
 
-    for package in ipackages:      
-        count = count + 1  
-        print(f"Inserting {count} of {len(ipackages)}", end="\r")
-        package_sql.InsertInstalled(conn,package)        
+    print ('Storeing installed packages.')
+    package_sql.InsertInstalled(conn,ipackages)        
 
     print()
 

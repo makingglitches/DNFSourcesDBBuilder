@@ -1,4 +1,7 @@
 import sqlite3
+import bulkchunk
+
+CURRENT_BATCH_MAX = 1000
 
 def ReadAll(path:str)->str:
     f = open(path, 'r')
@@ -16,7 +19,7 @@ ENTRY_FIELDS = {
     'pkgid':'pkgid', 
     'name':'name', 
     'ver':'version',
-    'rel':'release',
+    'rel':'release_ver',
     'epoch':'epoch',
     'flags':'flags'
 }
@@ -42,19 +45,10 @@ def CreateStructure(wcon:sqlite3.Connection):
     wcon.commit()
 
 
-def InsertGeneric(wconn:sqlite3.Connection, tag:str, repo_uuid:str, pkgid:str,  entry:dict):
-    
-    parameters = {}
-
-    parameters.update(entry)
-    parameters['pkgid'] = pkgid
-    parameters['repo_uuid'] = repo_uuid
-
-    for field in ENTRY_FIELDS:
-        parameters[field] = None
-
+def InsertGeneric(wconn:sqlite3.Connection, tag:str, batch:list[dict]):
     sql = GenericSqlStatements[tag]['insert']
-    wconn.execute(sql,parameters)
+    bulkchunk.processBatchInsert(wconn,sql,batch)
+    
 
 def SelectGeneric(rconn:sqlite3.Connection, tag:str, parameters:dict)->list[dict]:
     sql = GenericSqlStatements[tag]['select']
@@ -63,9 +57,9 @@ def SelectGeneric(rconn:sqlite3.Connection, tag:str, parameters:dict)->list[dict
 def InsertRepo(wconn:sqlite3.Connection, parameters:dict):
     wconn.execute(repo_insert,parameters)
 
-def InsertPackage(wcon:sqlite3.Connection, paramaters:dict):
-    wcon.execute(package_insert, paramaters)
+def InsertPackage(wcon:sqlite3.Connection, batch:list[dict]):
+    bulkchunk.processBatchInsert(wcon,package_insert,batch)
 
-def InsertInstalled(wcon:sqlite3.Connection, parameters:dict):
-    wcon.execute(installed_insert,parameters)
+def InsertInstalled(wcon:sqlite3.Connection, batch:list[dict]):
+    bulkchunk.processBatchInsert(wcon,installed_insert, batch)
 

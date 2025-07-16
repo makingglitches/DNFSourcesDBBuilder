@@ -3,7 +3,7 @@ import tempfile
 import json
 import os
 
-def getInstalledPackagesJson():
+def getInstalledPackagesJson()-> list[dict]:
     cmd = ["dnf", "repoquery", "--installed",  "--qf", "{\"epoch\":\"%{EPOCH}\",\"name\":\"%{NAME}\",\"version\":\"%{VERSION}\",\"release\":\"%{RELEASE}\",\"arch\":\"%{ARCH}\",\"repo\":\"%{repoid}\"}\\n"]
 
     fname = tempfile.mktemp()

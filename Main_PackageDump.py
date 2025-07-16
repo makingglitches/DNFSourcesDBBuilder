@@ -11,6 +11,8 @@ import sys
 import lxml.etree
 import decompression as decomp
 
+import getinstalled
+
 import package_sql
 
 NS = {
@@ -259,9 +261,22 @@ def main():
 
         os.remove(decomtemp)
         print()
-            
+
+    print ("Retrieving installed packages...") 
+    ipackages = getinstalled.getInstalledPackagesJson()   
+
+    count = 0
+
+    for package in ipackages:      
+        count = count + 1  
+        print(f"Inserting {count} of {len(ipackages)}", end="\r")
+        package_sql.InsertInstalled(conn,package)        
+
+    print()
+
     conn.commit()
     conn.close()
+
  
     print()
     print("Created Package Database Successfully.")

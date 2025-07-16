@@ -193,3 +193,15 @@ CREATE TABLE enhances (
     REFERENCES packages (pkgid,
     repo_uuid) 
 );
+
+-- Create table for installed packages
+
+create table installed(
+    epoch text,
+    name text,
+    version text, 
+    release text,
+    arch text,
+    repo text,
+    primary KEY(name,version,release,arch)
+);

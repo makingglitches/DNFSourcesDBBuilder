@@ -27,6 +27,7 @@ generics_insert = ReadAll('sql/generics_package_insert.sql')
 generics_select = ReadAll('sql/generics_package_select.sql')
 repo_insert = ReadAll('sql/repo_insert.sql')
 package_insert = ReadAll('sql/packages_insert.sql')
+installed_insert = ReadAll('sql/installed_insert.sql')
 
 GenericSqlStatements = {}
 
@@ -65,4 +66,6 @@ def InsertRepo(wconn:sqlite3.Connection, parameters:dict):
 def InsertPackage(wcon:sqlite3.Connection, paramaters:dict):
     wcon.execute(package_insert, paramaters)
 
+def InsertInstalled(wcon:sqlite3.Connection, parameters:dict):
+    wcon.execute(installed_insert,parameters)
 

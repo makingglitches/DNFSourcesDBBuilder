@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import PackageDataClass as pdat
+
 import sqlite3
 import lxml
 
@@ -19,6 +21,39 @@ NS = {
     'x': 'http://linux.duke.edu/metadata/common',
     'rpm': 'http://linux.duke.edu/metadata/rpm'
 }
+
+common_ns = "{http://linux.duke.edu/metadata/common}"
+rpm_ns = "{http://linux.duke.edu/metadata/rpm}"
+
+def tagname(ns,name):
+    return f"{ns}{name}"
+
+#TODO: UPDATE THIS FOR NEW LOGIC
+# see #149
+def extract_entries(tag:lxml.etree.Element, pkgid:str, repo_uuid:str):
+    entries = []
+        
+    for entry in tag.iterchildren():
+            
+            if entry.tag == tagname(rpm_ns,'entry'):            
+                item = dict(entry.attrib)
+            
+                # translate names from xml to table fields
+                for oldname in package_sql.ENTRY_FIELDS:
+                    newname = package_sql.ENTRY_FIELDS[oldname]
+
+                    if oldname == newname:
+                        if oldname not in item:
+                            item[oldname] = None
+                    else:
+                        item[newname] = None if not oldname in item else item.pop(oldname)
+
+                # add primary key reference
+                item['pkgid'] = pkgid
+                item['repo_uuid'] = repo_uuid 
+
+                entries.append(item)
+    return entries
 
 def RepoDirParts(repo_path:str):
 
@@ -104,173 +139,101 @@ def main():
 
         tree:lxml.etree.ElementTree = lxml.etree.parse(decomtemp)
 
-        root = tree.getroot()
+        root:lxml.etree.Element = tree.getroot()
+        
 
         count = int(root.attrib['packages'])
-        curr_pkg = 1
 
-        packages = root.findall('x:package',{'x':'http://linux.duke.edu/metadata/common'})
-        
-        #doesn't make sense.
-        #all_packages = []
+        # for item in root.iterchildren():
+        #     if item.
+            
+        curr_pkg = 1
 
         repouuid = r['repo_uuid']
 
-        pkgbatch = []
         
-        for p in packages:
+        #packages = root.findall('x:package',{'x':'http://linux.duke.edu/metadata/common'})
+        #doesn't make sense.
+        #all_packages = []    
+        
+        pkgbatch = []
 
-            print(f"Extracting Package {curr_pkg} of {count}", end="\r")
-            curr_pkg = curr_pkg + 1
+        for pkg in root.iterchildren():
+            if pkg.tag == tagname(common_ns,"package"):    
 
-            type_ = p.attrib.get('type')
+                print(f"Extracting Package {curr_pkg} of {count}", end="\r")
+                curr_pkg = curr_pkg + 1
 
-            name = p.findtext('x:name', namespaces=NS)
-            arch = p.findtext('x:arch', namespaces=NS)
+                currRec = pdat.PackageData()
+                currRec.type = pkg.attrib.get('type')
+                
+                
+                
+                for misc in pkg.iterchildren():
+    
+                    if misc.tag == tagname(common_ns,"version"):
+                         currRec.version = misc.attrib.get('ver')
+                         currRec.release_ver = misc.attrib.get('rel')
+                         currRec.epoch = misc.attrib.get('epoch')
+                    elif misc.tag == tagname(common_ns,"format"):
+                        for field in misc.iterchildren():      
 
-            version_tag = p.find('x:version', NS)
-            ver_epoch = version_tag.attrib.get('epoch')
-            ver_ver = version_tag.attrib.get('ver')
-            ver_rel = version_tag.attrib.get('rel')
+                            #TODO: HANDLE FILES TYPE AS WELL, DOESN'T SEEM TO BE USED MUCH
+                            if field.tag == tagname(rpm_ns, 'header-range'):
+                                currRec.header_start = field.attrib['start']
+                                currRec.header_end = field.attrib['end']
+                                continue
+                            else:
 
-            checksum_tag = p.find('x:checksum', NS)
+                                foundtag = False
 
+                                # this is for tags requires, provides, etc.
+                                for s  in package_sql.RELATION_TAGS:
+                                    if  not foundtag and tagname(rpm_ns, s) == field.tag:
+                                        tname = field.tag.replace(rpm_ns,'')
+                                        entries = extract_entries(field,currRec.checksum, repouuid)                                                                    
+                                        setattr(currRec, tname, entries)                                        
+                                        foundtag = True
+                                
+                                if not foundtag:
+                                    # rpm fields
+                                    # license, vendor, app_group, builhost, sourcerpm
+                                    tname = field.tag.replace(rpm_ns,'')
+                                    setattr(currRec,tname, field.text)
+                                    #currRec[tname] = field.text                                    
 
-            checksum = checksum_tag.text
-            checksum_type = checksum_tag.attrib['type']
-            checksum_pkgid = checksum_tag.attrib['pkgid']
+                    elif misc.tag == tagname(common_ns,"checksum"):                                                
+                        currRec.checksum= misc.text
+                        currRec.checksum_type = misc.attrib['type']
+                        currRec.checksum_pkgid =  misc.attrib['pkgid']
+                    elif misc.tag == tagname(common_ns,"time"):                        
+                        currRec.time_file= misc.attrib.get('file')
+                        currRec.time_build = misc.attrib.get('build')
+                    elif misc.tag == tagname(common_ns,"size"):                        
+                        currRec.size_package= misc.attrib.get('package')
+                        currRec.size_installed= misc.attrib.get('installed')
+                        currRec.size_archive= misc.attrib.get('archive')
+                    elif misc.tag == tagname(common_ns,"location"):
+                        currRec.location= misc.attrib.get('href')
+                    else:
+                        # common field names
+                        # name, arch, summary,description, packager, url
+                        tname = misc.tag.replace(common_ns,'')       
+                        setattr(currRec,tname, misc.text)     
+                        #currRec[tname] = misc.text
+                                                        
+                pkgbatch.append(currRec)
 
-            summary = p.findtext('x:summary', namespaces=NS)
-            description = p.findtext('x:description', namespaces=NS)
-            packager = p.findtext('x:packager', namespaces=NS)
-            url = p.findtext('x:url', namespaces=NS)
+                if len (pkgbatch) == package_sql.CURRENT_BATCH_MAX:
+                    package_sql.InsertPackage(conn,pkgbatch)
 
-            time_tag = p.find('x:time', NS)
-            time_file = time_tag.attrib.get('file')
-            time_build = time_tag.attrib.get('build')
+                    for pkg in pkgbatch:
+                        for tag in package_sql.RELATION_TAGS:
+                            #print(f"Processing tag: {tag}")
+                            gen = getattr(pkg,tag)
+                            package_sql.InsertGeneric(conn,tag,gen)
 
-            size_tag = p.find('x:size', NS)
-            size_pkg = size_tag.attrib.get('package')
-            size_inst = size_tag.attrib.get('installed')
-            size_arc = size_tag.attrib.get('archive')
-
-            location_tag = p.find('x:location', NS)
-            location_href = location_tag.attrib.get('href')
-
-            package_data = {
-                'type': type_,                
-                'repo_uuid':repouuid,
-                'pkgid': checksum,
-                'name': name,
-                'arch': arch,
-                'version': ver_ver,
-                'epoch': ver_epoch,
-                'release_ver': ver_rel,                                
-                'summary': summary,
-                'description': description,
-                'packager': packager,
-                'url': url,
-                'time_file': time_file,
-                'time_build': time_build,                
-                'size_package': size_pkg,
-                'size_installed': size_inst,
-                'size_archive': size_arc,                
-                'location': location_href,                
-                'checksum_type':checksum_type,
-                'checksum_pkgid':checksum_pkgid,
-                'checksum':checksum,
-                'license': None,
-                'vendor': None,
-                'app_group': None,
-                'buildhost': None,
-                'sourcerpm': None,
-                'header_start': None,
-                'header_end':None,
-                'requires': [],
-                'provides': [],
-                'conflicts': [],
-                'obsoletes': [],
-                'recommends': [],
-                'suggests': [],
-                'supplements': [],
-                'enhances': [],
-                'files': []
-            }
-
-            format_tag = p.find('x:format', NS)
-
-            if format_tag is not None:
-
-                def extract_entries(tag_name:str, pkgid:str, repo_uuid:str):
-                    entries = []
-                    tag = format_tag.find(f'rpm:{tag_name}', NS)
-                    if tag is not None:
-                        for entry in tag.findall('rpm:entry', NS):
-                            
-                            item = dict(entry.attrib)
-                            
-                            # translate names from xml to table fields
-                            for oldname in package_sql.ENTRY_FIELDS:
-                                newname = package_sql.ENTRY_FIELDS[oldname]
-
-                                if oldname == newname:
-                                    if oldname not in item:
-                                        item[oldname] = None
-                                else:
-                                    item[newname] = None if not oldname in item else item.pop(oldname)
-
-                            # add primary key reference
-                            item['pkgid'] = pkgid
-                            item['repo_uuid'] = repo_uuid 
-
-                            entries.append(item)
-
-                    return entries
-
-                package_data.update({
-                    'license': format_tag.findtext('rpm:license', namespaces=NS),
-                    'vendor': format_tag.findtext('rpm:vendor', namespaces=NS),
-                    'app_group': format_tag.findtext('rpm:group', namespaces=NS),
-                    'buildhost': format_tag.findtext('rpm:buildhost', namespaces=NS),
-                    'sourcerpm': format_tag.findtext('rpm:sourcerpm', namespaces=NS),
-                    'header_start': None,
-                    'header_end':None,
-                    'requires': extract_entries('requires',checksum,repouuid),
-                    'provides': extract_entries('provides', checksum, repouuid),
-                    'conflicts': extract_entries('conflicts', checksum, repouuid),
-                    'obsoletes': extract_entries('obsoletes', checksum, repouuid),
-                    'recommends': extract_entries('recommends', checksum, repouuid),
-                    'suggests': extract_entries('suggests', checksum, repouuid),
-                    'supplements': extract_entries('supplements', checksum, repouuid),
-                    'enhances': extract_entries('enhances', checksum, repouuid),
-                    'files': [
-                        {
-                            'name': f.text,
-                            'type': f.attrib.get('type')
-                        } for f in format_tag.findall('rpm:file', NS)
-                    ]
-                })
-
-                header_range = format_tag.find('rpm:header-range', NS)
-
-                if header_range is not None:
-                    package_data['header_start'] = header_range.attrib.get('start')
-                    package_data['header_end'] = header_range.attrib.get('end')
-
-            # this doesn't make sense.
-            #all_packages.append(package_data)
-
-            pkgbatch.append(package_data)
-
-            if len (pkgbatch) == package_sql.CURRENT_BATCH_MAX:
-                package_sql.InsertPackage(conn,pkgbatch)
-
-                for pkg in pkgbatch:
-                    for tag in package_sql.RELATION_TAGS:
-                        #print(f"Processing tag: {tag}")
-                        package_sql.InsertGeneric(conn,tag,pkg[tag])
-
-                pkgbatch = []
+                    pkgbatch = []
 
         if len(pkgbatch) > 0:
             package_sql.InsertPackage(conn,pkgbatch)
@@ -278,7 +241,8 @@ def main():
             for pkg in pkgbatch:
                 for tag in package_sql.RELATION_TAGS:
                     #print(f"Processing tag: {tag}")
-                    package_sql.InsertGeneric(conn,tag,pkg[tag])
+                    gen = getattr(pkg,tag)
+                    package_sql.InsertGeneric(conn,tag,gen)
 
         os.remove(decomtemp)
         print()

@@ -1,7 +1,7 @@
 import sqlite3
 import re
 import math
-
+import PackageDataClass
 
 # good for the specific usecase
 # further refinement is in a heavily modified script sqlcolmap in the gis notes application
@@ -37,29 +37,40 @@ def genstatement(sql:str, tupleLimit=200)->list[str]:
     maxpieces = maxitemsforstmt(collist) 
 
     # will error if there is none
-    table =  sql[0: sql.index('(')-1].strip().split(' ')[-1]
+    table =  sql[0: sql.index('(')].strip().split(' ')[-1]
         
     if maxpieces > tupleLimit:
         maxpieces = tupleLimit
     elif maxpieces  < tupleLimit:
         raise "your batch size is too large."
   
-    basesql = f"INSERT INTO {table}( {','.join(collist)}) VALUES (\n" 
-    basesql = basesql +  ',\t\n'.join( [ valpiece for i in range(0,maxpieces) ]) + "\n);"
+    basesql = f"INSERT INTO {table}( {','.join(collist)}) VALUES \n" 
+    basesql = basesql +  ',\t\n'.join( [ valpiece for i in range(0,maxpieces) ]) + "\n;"
 
     return basesql
 
-
-
-def flattenbatch(collist:list[str], batch:list[dict])->list[dict]:
+def flattenbatch(collist:list[str], batch:list[object], translate:dict={})->list:
 
     resbatch = []
+
+    for i in range(0,len(collist)):
+        c = collist[i]
+
+        if c in translate:
+            collist[i] = translate[c]
 
     for i in batch:
         item = []
 
-        for c in collist:    
-            item.append(i[c])
+        for c in collist: 
+            att = None
+
+            if type(i)  == dict:
+                att = i[c]
+            else:
+                att = getattr(i,c)  
+
+            item.append(att)
 
         resbatch.extend(item)
 
@@ -69,7 +80,7 @@ def maxitemsforstmt(collist:list[str])->int:
     return math.trunc(maxparamlim / len(collist))
 
 # keep this as is for mysql
-def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict]):
+def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict], translate:list[dict] = []):
 
     if conn.in_transaction:
         conn.commit()
@@ -94,18 +105,18 @@ def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict]):
     while len(parameters) > maxlimit:
 
         # pull out expected bathsize
-        batch,parameters = (parameters[0:maxlimit], parameters[maxlimit:])
+        batch,parameters = (parameters[0:maxlimit], parameters[maxlimit:])        
 
         count  = count + len(batch)
 
-        # if verbose:
-        #     print(f"Processing {count} of {total} ", end="\r")
+        # generate the multi-insert sql statement
+        stmt = genstatement(sql,maxlimit)
+        # generate a flat parameter list in the correct order
+        batch = flattenbatch(collist,batch,translate)
         
-        #stmt = genstatement(sql,maxlimit)
+        conn.execute(stmt,batch) 
 
-        #batch = flattenbatch(collist, batch)
-        
-        conn.executemany(sql,batch) #stmt, batch
+        #conn.executemany(stmt,batch) #stmt, batch
 
     conn.commit()
     
@@ -113,15 +124,11 @@ def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict]):
 
         #stmt = genstatement(sql, maxlimit)
 
-        count = count + len(parameters)
-
+        stmt = genstatement(sql,len(parameters))
         # for other sql instances this would work.
-        #batch = flattenbatch(collist, parameters)
+        batch = flattenbatch(collist, parameters)
 
-        # if verbose:
-        #     print(f"Processing {count} of {total} ", end="\r")
-        
-        conn.executemany(sql,parameters) #stmt,batch)
+        conn.execute(stmt, batch)
 
     conn.commit()
 

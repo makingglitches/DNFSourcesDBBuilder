@@ -1,7 +1,9 @@
 import sqlite3
 import bulkchunk
+import os
 
-CURRENT_BATCH_MAX = 1000
+
+CURRENT_BATCH_MAX = 10000
 
 def ReadAll(path:str)->str:
     f = open(path, 'r')
@@ -61,5 +63,17 @@ def InsertPackage(wcon:sqlite3.Connection, batch:list[dict]):
     bulkchunk.processBatchInsert(wcon,package_insert,batch)
 
 def InsertInstalled(wcon:sqlite3.Connection, batch:list[dict]):
-    bulkchunk.processBatchInsert(wcon,installed_insert, batch)
+    translate = {
+        'release_ver': 'release'
+    }
+    bulkchunk.processBatchInsert(wcon,installed_insert, batch,translate)
 
+def RecreateDB(filepath:str)->sqlite3.Connection:
+
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    
+    conn:sqlite3.Connection = sqlite3.connect(filepath)
+    CreateStructure(conn)
+
+    return conn

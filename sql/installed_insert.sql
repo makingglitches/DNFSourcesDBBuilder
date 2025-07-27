@@ -2,7 +2,7 @@
         epoch,
         name,
         version,
-        release,
+        release_ver,
         arch,
         repo
     )

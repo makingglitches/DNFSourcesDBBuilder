@@ -79,17 +79,59 @@ def flattenbatch(collist:list[str], batch:list[object], translate:dict={})->list
 def maxitemsforstmt(collist:list[str])->int:
     return math.trunc(maxparamlim / len(collist))
 
-# keep this as is for mysql
-def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict], translate:list[dict] = []):
 
-    if conn.in_transaction:
+def useExecuteManyInsert(conn:sqlite3.Connection, 
+                         sql:str, 
+                         parameters:list[dict], 
+                         translate:list[dict] = [],
+                         toCommit:bool = True):
+
+    if translate is None:
+        translate = []
+
+    if len(parameters) == 0:
+        return
+
+    if not conn.in_transaction and toCommit:
+        conn.execute('BEGIN')
+
+    noprepare:bool = type(parameters[0]) in (dict,tuple,iter)
+
+    # there was a whole argument and changing backend code regarding this bs
+    # trying to force me to write more than one version :p
+    # so I created a third with an optional choice between methods of insert
+    # and enable tracking how well it works.
+
+    if noprepare:
+        for p in parameters:
+            
+            # just add the damn thingin, sqlite will pick it up.
+            for t in translate:
+                p[translate[t]] = p[t]
+ 
+        c = conn.executemany(sql,parameters)
+    else:
+        # assume class instance
+        c =  conn.executemany(sql,[ vars(p) for p in parameters])
+
+    if toCommit:
         conn.commit()
 
-    conn.execute("PRAGMA synchronous = OFF")
-    conn.execute("PRAGMA journal_mode = MEMORY")
-    conn.execute("PRAGMA temp_store = MEMORY")
 
-    conn.execute('BEGIN')
+
+
+# keep this as is for mysql
+def processBatchInsert(conn:sqlite3.Connection, 
+                       sql:str, 
+                       parameters:list[dict], 
+                       translate:list[dict] = [],
+                       toCommit=True):
+
+    if translate is None:
+        translate = []
+        
+    if toCommit and not conn.in_transaction:
+        conn.execute('BEGIN')
 
     count = 0
     total = len(parameters)
@@ -115,11 +157,7 @@ def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict], 
         batch = flattenbatch(collist,batch,translate)
         
         conn.execute(stmt,batch) 
-
-        #conn.executemany(stmt,batch) #stmt, batch
-
-    conn.commit()
-    
+       
     if len(parameters) > 0:
 
         #stmt = genstatement(sql, maxlimit)
@@ -130,7 +168,8 @@ def processBatchInsert(conn:sqlite3.Connection, sql:str, parameters:list[dict], 
 
         conn.execute(stmt, batch)
 
-    conn.commit()
+    if toCommit:
+        conn.commit()
 
     return total
 

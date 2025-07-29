@@ -85,6 +85,7 @@
               <xs:element name="location" minOccurs="0">
                 <xs:complexType>
                   <xs:attribute name="href" type="xs:string" />
+                  <xs:anyAttribute namespace="http://www.w3.org/XML/1998/namespace" processContents="lax"/>
                 </xs:complexType>
               </xs:element>
               <xs:element name="format" minOccurs="0">

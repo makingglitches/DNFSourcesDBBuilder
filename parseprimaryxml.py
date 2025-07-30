@@ -9,12 +9,24 @@ rpm_ns = "{http://linux.duke.edu/metadata/rpm}"
 def tagname(ns,name):
     return f"{ns}{name}"
 
+# tagname was taking 5.91 seconds.
+METADATA_TAG= tagname(common_ns, 'metadata')
+PACKAGE_TAG = tagname(common_ns,'package')
+VERSION_TAG = tagname(common_ns,"version")
+FORMAT_TAG = tagname(common_ns,"format")
+CHECKSUM_TAG = tagname(common_ns,"checksum")
+ENTRY_TAG = tagname(rpm_ns,'entry')
+HEADER_RANGE_TAG = tagname(rpm_ns, 'header-range')
+TIME_TAG = tagname(common_ns,"time")
+SIZE_TAG = tagname(common_ns,"size")
+LOCATION_TAG = tagname(common_ns,"location")
+
 def extract_entries(tag:etree.Element, pkgid:str, repo_uuid:str):
     entries = []
         
     for entry in tag.iterchildren():
             
-            if entry.tag == tagname(rpm_ns,'entry'):            
+            if entry.tag == ENTRY_TAG:            
                 item = dict(entry.attrib)
             
                 # translate names from xml to table fields
@@ -39,7 +51,7 @@ def extract_entries(tag:etree.Element, pkgid:str, repo_uuid:str):
 
 def ParsePackage(pkg:etree.Element,repouuid:str)->pdat.PackageData | None:    
 
-    if pkg.tag == tagname(common_ns,"package"):    
+    if pkg.tag == PACKAGE_TAG:    
         currRec = pdat.PackageData()
         currRec.type = pkg.attrib.get('type')
         currRec.repo_uuid = repouuid
@@ -50,15 +62,15 @@ def ParsePackage(pkg:etree.Element,repouuid:str)->pdat.PackageData | None:
             # first and leave the generic ones that can simply be 
             # retrieved and assigned for last in each structures case.
             # version defines atributes
-            if misc.tag == tagname(common_ns,"version"):
+            if misc.tag == VERSION_TAG:
                     currRec.version = misc.attrib.get('ver')
                     currRec.release_ver = misc.attrib.get('rel')
                     currRec.epoch = misc.attrib.get('epoch')
             # go through format tag again
-            elif misc.tag == tagname(common_ns,"format"):
+            elif misc.tag == FORMAT_TAG:
                 for field in misc.iterchildren():      
                     #TODO: HANDLE FILES TYPE AS WELL, DOESN'T SEEM TO BE USED MUCH
-                    if field.tag == tagname(rpm_ns, 'header-range'):
+                    if field.tag == HEADER_RANGE_TAG:
                         currRec.header_start = field.attrib['start']
                         currRec.header_end = field.attrib['end']
                         continue
@@ -79,18 +91,18 @@ def ParsePackage(pkg:etree.Element,repouuid:str)->pdat.PackageData | None:
                             tname = field.tag.replace(rpm_ns,'')
                             setattr(currRec,tname, field.text)
                             #currRec[tname] = field.text                                    
-            elif misc.tag == tagname(common_ns,"checksum"):                                                
+            elif misc.tag == CHECKSUM_TAG:                                                
                 currRec.checksum= misc.text
                 currRec.checksum_type = misc.attrib['type']
                 currRec.checksum_pkgid =  misc.attrib['pkgid']
-            elif misc.tag == tagname(common_ns,"time"):                        
+            elif misc.tag == TIME_TAG:                        
                 currRec.time_file= misc.attrib.get('file')
                 currRec.time_build = misc.attrib.get('build')
-            elif misc.tag == tagname(common_ns,"size"):                        
+            elif misc.tag == SIZE_TAG:                        
                 currRec.size_package= misc.attrib.get('package')
                 currRec.size_installed= misc.attrib.get('installed')
                 currRec.size_archive= misc.attrib.get('archive')
-            elif misc.tag == tagname(common_ns,"location"):
+            elif misc.tag == LOCATION_TAG:
                 currRec.location= misc.attrib.get('href')
             else:
                 # common field names

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 import PackageDataClass as pdat
 import parseprimaryxml as pxml
 
@@ -7,12 +8,12 @@ import sqlite3
 from lxml import etree
 
 
+
 import fnmatch
 
 import os
 import sys
 
-import lxml.etree
 import decompression as decomp
 import datetime
 
@@ -135,50 +136,126 @@ def main():
     for r in repos:
         
         print(f"Repo: {r['repo_full_name']}...")
-
+    
         decomtemp = decomp.decompress_to_temp(r['primaryxmlfilename'])
 
-        st = datetime.datetime.now(datetime.timezone.utc)
+        #st = datetime.datetime.now(datetime.timezone.utc)
 
-        tree:etree.ElementTree = lxml.etree.parse(decomtemp)
-        root:etree.Element = tree.getroot()
+        #tree:etree.ElementTree = lxml.etree.parse(decomtemp)
+        #root:etree.Element = tree.getroot()
 
-        etime += (datetime.datetime.now(datetime.timezone.utc) - st).microseconds/10**6
+        #etime += (datetime.datetime.now(datetime.timezone.utc) - st).microseconds/10**6
         
-        count = int(root.attrib['packages'])
+        count = 0 #int(root.attrib['packages']) # get in start event.
 
-        ecount += count
+        #ecount += count
 
         curr_pkg = 1
         repouuid = r['repo_uuid']        
         pkgbatch = []
+        
+        metadataname = pxml.tagname(pxml.common_ns,'metadata')
+        packagename  = pxml.tagname(pxml.common_ns, 'package')
 
-        # parse, and store packages
-        for pkg in root.iterchildren():
+        
+        encycle:datetime.datetime = None
+        stcycle:datetime.datetime = datetime.datetime.utcnow()
+        
+        # open only to get first tag. iterparse doesn't always provide an underlying stream close method
+        # would make sense has been done, but nope. this is the 'right' way to do it
+        with open(decomtemp, 'rb') as f:
 
-                
-            st = datetime.datetime.utcnow()
+            context:etree.iterparse = etree.iterparse(f, events=('start',))            
+            for event, elem in context:                        
+                if event == 'start' and elem.tag == metadataname:
+                    count = int(elem.attrib['packages'])
+                    ecount += count
+                    encycle = datetime.datetime.utcnow()     
+                    etime += (encycle - stcycle).microseconds / 10**6
+                    break
 
-            p = pxml.ParsePackage(pkg,repouuid)
+        #reopen to emit only start tag events.
+        with open(decomtemp, 'rb') as f:
+            context = etree.iterparse(decomtemp, events=('end',))
 
-            etime += (datetime.datetime.utcnow()-st).microseconds/10**6
+            stcycle:datetime.datetime = datetime.datetime.utcnow()
+        
+            for event, elem in context:               
 
-            if not p is None: 
-                print(f"Extracting Package {curr_pkg} of {count}", end="\r")
-                curr_pkg = curr_pkg + 1
+                encycle = datetime.datetime.utcnow()     
+                etime += (encycle - stcycle).microseconds / 10**6
 
-                pkgbatch.append(p)
+                st = datetime.datetime.utcnow()
+                p = pxml.ParsePackage(elem,repouuid)
+                etime += (datetime.datetime.utcnow()-st).microseconds/10**6
 
-                if len (pkgbatch) == package_sql.CURRENT_BATCH_MAX:                
-                    track.append( InsertPackageBatch(conn,pkgbatch))                    
-                    pkgbatch = []
+                if not p is None: 
+                    print(f"Extracting Package {curr_pkg} of {count}", end="\r")
+                    curr_pkg = curr_pkg + 1
 
+                    pkgbatch.append(p)
+
+                    if len (pkgbatch) == package_sql.CURRENT_BATCH_MAX:                
+                        track.append( InsertPackageBatch(conn,pkgbatch))                    
+                        pkgbatch = []
+
+                    elem.clear()
+
+            stcycle = datetime.datetime.utcnow()                 
+                                
         if len(pkgbatch) > 0:
             # insert the remaining information
             track.append(  InsertPackageBatch(conn,pkgbatch))
 
         os.remove(decomtemp)
         print()
+
+        # **********begin refactor to see effects on speed and ********
+        # and ram footprint.
+
+        # st = datetime.datetime.now(datetime.timezone.utc)
+
+        # tree:etree.ElementTree = lxml.etree.parse(decomtemp)
+        # root:etree.Element = tree.getroot()
+
+        # etime += (datetime.datetime.now(datetime.timezone.utc) - st).microseconds/10**6
+        
+        # count = int(root.attrib['packages'])
+
+        # ecount += count
+
+        # curr_pkg = 1
+        # repouuid = r['repo_uuid']        
+        # pkgbatch = []
+
+        # # parse, and store packages
+        # for pkg in root.iterchildren():
+
+                
+        #     st = datetime.datetime.utcnow()
+
+        #     p = pxml.ParsePackage(pkg,repouuid)
+
+        #     etime += (datetime.datetime.utcnow()-st).microseconds/10**6
+
+        #     if not p is None: 
+        #         print(f"Extracting Package {curr_pkg} of {count}", end="\r")
+        #         curr_pkg = curr_pkg + 1
+
+        #         pkgbatch.append(p)
+
+        #         if len (pkgbatch) == package_sql.CURRENT_BATCH_MAX:                
+        #             track.append( InsertPackageBatch(conn,pkgbatch))                    
+        #             pkgbatch = []
+
+        # if len(pkgbatch) > 0:
+        #     # insert the remaining information
+        #     track.append(  InsertPackageBatch(conn,pkgbatch))
+
+        # os.remove(decomtemp)
+        # print()
+
+    #************************ End Refactor here *******************
 
     print ("Retrieving installed packages...") 
     ipackages = getinstalled.getInstalledPackagesJson()   
